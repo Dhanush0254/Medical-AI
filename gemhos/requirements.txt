@@ -1,0 +1,11 @@
+flask
+pandas
+numpy
+joblib
+scikit-learn
+opencv-python-headless
+pytesseract
+pdf2image
+pdfplumber
+pillow
+gunicorn
