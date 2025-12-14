@@ -6,7 +6,7 @@ This is a project I built to solve a real problem: understanding complex medical
 
 It combines **Computer Vision (OCR)** to read the documents and **Machine Learning** to predict risks for things like Diabetes and Heart issues.
 
-> **Live Demo:** [Link to your Render app]
+> **Live Demo:** https://medical-ai-fqnt.onrender.com/
 
 ---
 
@@ -63,8 +63,6 @@ If you want to run it directly on your machine, you'll need to install **Tessera
 
 Built with ❤️ by:
 * **Dhanush**
-* **Majin Studio**
-* **Prince Vegeta**
 
 ---
 
