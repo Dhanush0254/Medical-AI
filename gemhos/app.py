@@ -43,18 +43,14 @@ def predict_risk(data):
     if gluc or hba1c:
         has_data = True
         status, reason = "Healthy", "Normal Levels"
-        
-        # Rule-based Check
         if (gluc and gluc > 140) or (hba1c and hba1c > 6.5):
             status, reason = "High Risk", "Elevated Glucose/A1C"
-            suggs.append("⚠️ Diabetes: Consult a Diabetologist. Reduce sugar intake and monitor blood glucose.")
+            suggs.append("⚠️ Diabetes: Consult a Diabetologist. Reduce sugar intake.")
         else:
-            # AI Model Check
             m = get_model('diabetes')
             if m and m.predict(pd.DataFrame([[gluc or 100, hba1c or 5.5, age, 25]], columns=['glucose','hba1c','age','bmi']))[0] == 1:
                 status, reason = "High Risk", "AI Pattern Detection"
                 suggs.append("⚠️ Diabetes Pattern: AI detects subtle patterns. Consider a preventive checkup.")
-    
     preds.append({"condition": "Diabetes", "risk": status, "reason": reason})
 
     # --- 2. HEART CHECK ---
@@ -64,18 +60,14 @@ def predict_risk(data):
     if chol or ldl:
         has_data = True
         status, reason = "Healthy", "Normal Lipid Profile"
-        
-        # Rule-based
         if (chol and chol > 240) or (ldl and ldl > 160):
             status, reason = "High Risk", "High Cholesterol/LDL"
-            suggs.append("❤️ Heart: Limit saturated fats (red meat, fried food). Consider cardio exercises.")
+            suggs.append("❤️ Heart: Limit saturated fats. Consider cardio exercises.")
         else:
-            # AI Model
             m = get_model('cardio')
             if m and m.predict(pd.DataFrame([[chol or 180, ldl or 100, data.get('hdl',50), data.get('triglycerides',150), age]], columns=['cholesterol','ldl','hdl','triglycerides','age']))[0] == 1:
                 status, reason = "High Risk", "AI Anomaly Detected"
-                suggs.append("❤️ Heart Pattern: AI found potential risks. Monitor blood pressure and lipids.")
-
+                suggs.append("❤️ Heart Pattern: AI found potential risks. Monitor blood pressure.")
     preds.append({"condition": "Heart", "risk": status, "reason": reason})
 
     # --- 3. ANEMIA CHECK ---
@@ -84,22 +76,20 @@ def predict_risk(data):
 
     if hb:
         has_data = True
-        if hb < 13: # Simplified threshold
+        if hb < 13:
             status, reason = "High Risk", f"Low Hemoglobin ({hb})"
-            suggs.append("🩸 Anemia: Increase iron-rich foods (spinach, dates, red meat). Consult a doctor.")
+            suggs.append("🩸 Anemia: Increase iron-rich foods (spinach, dates). Consult a doctor.")
         else:
             status, reason = "Healthy", "Normal Levels"
-            # AI Model
             m = get_model('anemia')
             if m and m.predict(pd.DataFrame([[hb, data.get('red_blood_cells', 4.5), age]], columns=['hemoglobin','red_blood_cells','age']))[0] == 1:
                 status, reason = "High Risk", "AI Flagged"
-                suggs.append("🩸 Anemia Pattern: AI suggests further investigation despite normal levels.")
-
+                suggs.append("🩸 Anemia Pattern: AI suggests investigation despite normal levels.")
     preds.append({"condition": "Anemia", "risk": status, "reason": reason})
     
     # --- 4. GENERAL SUGGESTIONS ---
     if not has_data: 
-        suggs = ["ℹ️ No readable data found. Please enter values manually or upload a clearer file."]
+        suggs = ["ℹ️ No readable data found. Please enter values manually."]
     elif not suggs: 
         suggs.append("🎉 Great News: Your vitals look healthy! Keep up the good lifestyle.")
     
@@ -154,7 +144,7 @@ HTML_UI = """
             animation: spin 1s linear infinite; margin-bottom: 15px;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .loading-text { color: var(--text); font-weight: 600; font-size: 1.1rem; }
+        .loading-text { color: var(--text); font-weight: 600; font-size: 1.1rem; transition: opacity 0.3s; }
     </style>
 </head>
 <body>
@@ -200,17 +190,48 @@ HTML_UI = """
 </div>
 
 <script>
-function showLoader(text) {
-    document.getElementById('loaderText').innerText = text;
-    document.getElementById('loader').style.display = 'flex';
-}
-function hideLoader() { document.getElementById('loader').style.display = 'none'; }
+// --- DYNAMIC LOADER LOGIC ---
+let loaderInterval;
 
+function showLoader(messages) {
+    const textEl = document.getElementById('loaderText');
+    const loader = document.getElementById('loader');
+    
+    // Set first message
+    textEl.innerText = messages[0];
+    loader.style.display = 'flex';
+    
+    let index = 0;
+    
+    // Clear any previous timer
+    if (loaderInterval) clearInterval(loaderInterval);
+    
+    // Rotate messages every 2.5 seconds
+    loaderInterval = setInterval(() => {
+        index++;
+        if (index < messages.length) {
+            textEl.innerText = messages[index];
+        } else {
+            // Stay on the last message
+            clearInterval(loaderInterval);
+        }
+    }, 2500);
+}
+
+function hideLoader() { 
+    document.getElementById('loader').style.display = 'none'; 
+    if (loaderInterval) clearInterval(loaderInterval);
+}
+
+// --- MAIN FUNCTIONS ---
 async function handleFile(input) {
     const file = input.files[0];
     if (!file) return;
 
-    showLoader("Scanning Document...");
+    // 1. Show Dynamic Messages
+    showLoader(["Scanning Documents...", "Just a Minute...", "Extracting Data...", "Finishing Up..."]);
+
+    // Reset UI
     document.querySelectorAll('input').forEach(i => { i.value = ''; i.style.borderColor = '#334155'; });
     document.getElementById('results').style.display = 'none';
     
@@ -241,12 +262,14 @@ async function handleFile(input) {
                 if(el) { el.value = v; el.style.borderColor = '#22c55e'; }
             }
         }
-    } catch { alert("Extraction Error."); } 
+    } catch { alert("Extraction Error. Please try again."); } 
     finally { hideLoader(); }
 }
 
 async function analyze() {
-    showLoader("Analyzing Health Data...");
+    // 2. Show Dynamic Messages
+    showLoader(["Analyzing Health Data...", "Running AI Models...", "Generating Recommendations..."]);
+    
     const payload = {};
     document.querySelectorAll('input').forEach(i => { if(i.value) payload[i.id] = parseFloat(i.value); });
     
@@ -255,8 +278,6 @@ async function analyze() {
         const data = await res.json();
         
         let html = '';
-        
-        // 1. Predictions
         data.predictions.forEach(p => {
             const color = p.risk.includes('High') ? '#ef4444' : '#22c55e';
             html += `<div class="glass-card" style="margin-bottom:10px; border-left: 4px solid ${color}; display:flex; justify-content:space-between; align-items:center;">
@@ -264,15 +285,13 @@ async function analyze() {
                 <span class="badge" style="color:${color}; border:1px solid ${color}">${p.risk}</span>
             </div>`;
         });
-
-        // 2. Recommendations (NEW)
+        
+        // Recommendations
         if(data.suggestions && data.suggestions.length > 0) {
             html += `<div class="glass-card" style="margin-top:15px; border-left: 4px solid #f59e0b;">
                 <strong>💡 Recommendations:</strong>
                 <ul style="margin: 10px 0 0 20px; padding: 0; color: #cbd5e1; font-size: 0.95rem;">`;
-            data.suggestions.forEach(s => {
-                html += `<li style="margin-bottom:8px;">${s}</li>`;
-            });
+            data.suggestions.forEach(s => { html += `<li style="margin-bottom:8px;">${s}</li>`; });
             html += `</ul></div>`;
         }
 
@@ -311,5 +330,5 @@ def predict():
     return jsonify(dict(zip(['predictions', 'suggestions'], predict_risk(request.json))))
 
 if __name__ == '__main__':
-    # Local development server
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Use 0.0.0.0 for Render, but debug=False for production safety
+    app.run(host='0.0.0.0', port=5000, debug=False)
