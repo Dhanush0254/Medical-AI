@@ -36,46 +36,72 @@ def predict_risk(data):
     has_data = False
     age = data.get('age', 45)
 
-    # DIABETES
+    # --- 1. DIABETES CHECK ---
     gluc, hba1c = data.get('glucose'), data.get('hba1c')
     status, reason = "Unknown", "Insufficient Data"
+    
     if gluc or hba1c:
         has_data = True
-        status, reason = "Healthy", "Normal"
+        status, reason = "Healthy", "Normal Levels"
+        
+        # Rule-based Check
         if (gluc and gluc > 140) or (hba1c and hba1c > 6.5):
             status, reason = "High Risk", "Elevated Glucose/A1C"
+            suggs.append("⚠️ Diabetes: Consult a Diabetologist. Reduce sugar intake and monitor blood glucose.")
         else:
+            # AI Model Check
             m = get_model('diabetes')
             if m and m.predict(pd.DataFrame([[gluc or 100, hba1c or 5.5, age, 25]], columns=['glucose','hba1c','age','bmi']))[0] == 1:
-                status, reason = "High Risk", "AI Pattern"
+                status, reason = "High Risk", "AI Pattern Detection"
+                suggs.append("⚠️ Diabetes Pattern: AI detects subtle patterns. Consider a preventive checkup.")
+    
     preds.append({"condition": "Diabetes", "risk": status, "reason": reason})
 
-    # CARDIO
+    # --- 2. HEART CHECK ---
     chol, ldl = data.get('cholesterol'), data.get('ldl')
     status, reason = "Unknown", "Insufficient Data"
+    
     if chol or ldl:
         has_data = True
-        status, reason = "Healthy", "Normal"
+        status, reason = "Healthy", "Normal Lipid Profile"
+        
+        # Rule-based
         if (chol and chol > 240) or (ldl and ldl > 160):
-            status, reason = "High Risk", "High Lipids"
+            status, reason = "High Risk", "High Cholesterol/LDL"
+            suggs.append("❤️ Heart: Limit saturated fats (red meat, fried food). Consider cardio exercises.")
         else:
+            # AI Model
             m = get_model('cardio')
             if m and m.predict(pd.DataFrame([[chol or 180, ldl or 100, data.get('hdl',50), data.get('triglycerides',150), age]], columns=['cholesterol','ldl','hdl','triglycerides','age']))[0] == 1:
-                status, reason = "High Risk", "AI Anomaly"
+                status, reason = "High Risk", "AI Anomaly Detected"
+                suggs.append("❤️ Heart Pattern: AI found potential risks. Monitor blood pressure and lipids.")
+
     preds.append({"condition": "Heart", "risk": status, "reason": reason})
 
-    # ANEMIA
+    # --- 3. ANEMIA CHECK ---
     hb = data.get('hemoglobin')
+    status, reason = "Unknown", "Insufficient Data"
+
     if hb:
         has_data = True
-        status, reason = ("High Risk", f"Low Hgb ({hb})") if hb < 13 else ("Healthy", "Normal")
-        m = get_model('anemia')
-        if status == "Healthy" and m and m.predict(pd.DataFrame([[hb, data.get('red_blood_cells', 4.5), age]], columns=['hemoglobin','red_blood_cells','age']))[0] == 1:
-            status, reason = "High Risk", "AI Flag"
+        if hb < 13: # Simplified threshold
+            status, reason = "High Risk", f"Low Hemoglobin ({hb})"
+            suggs.append("🩸 Anemia: Increase iron-rich foods (spinach, dates, red meat). Consult a doctor.")
+        else:
+            status, reason = "Healthy", "Normal Levels"
+            # AI Model
+            m = get_model('anemia')
+            if m and m.predict(pd.DataFrame([[hb, data.get('red_blood_cells', 4.5), age]], columns=['hemoglobin','red_blood_cells','age']))[0] == 1:
+                status, reason = "High Risk", "AI Flagged"
+                suggs.append("🩸 Anemia Pattern: AI suggests further investigation despite normal levels.")
+
     preds.append({"condition": "Anemia", "risk": status, "reason": reason})
     
-    if not has_data: suggs = ["ℹ️ Upload a file."]
-    elif not suggs: suggs.append("🎉 You look healthy!")
+    # --- 4. GENERAL SUGGESTIONS ---
+    if not has_data: 
+        suggs = ["ℹ️ No readable data found. Please enter values manually or upload a clearer file."]
+    elif not suggs: 
+        suggs.append("🎉 Great News: Your vitals look healthy! Keep up the good lifestyle.")
     
     return preds, suggs
 
@@ -103,10 +129,9 @@ HTML_UI = """
         .upload-zone { border: 2px dashed #475569; border-radius: 12px; padding: 30px; text-align: center; cursor: pointer; transition: 0.3s; }
         .upload-zone:hover { border-color: var(--primary); background: rgba(37, 99, 235, 0.1); }
         
-        /* Responsive Grid */
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 25px; }
         @media (max-width: 600px) {
-            .grid { grid-template-columns: 1fr; } /* Stack vertically on mobile */
+            .grid { grid-template-columns: 1fr; }
             h1 { font-size: 1.8rem; }
             .container { padding: 0 5px; }
         }
@@ -116,9 +141,29 @@ HTML_UI = """
         .badge { padding: 4px 10px; border-radius: 99px; font-size: 0.75rem; font-weight: bold; }
 
         .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #334155; color: #64748b; font-size: 0.8rem; }
+
+        /* LOADER */
+        .loader-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(5px);
+            display: none; justify-content: center; align-items: center; flex-direction: column; z-index: 9999;
+        }
+        .spinner {
+            width: 50px; height: 50px; border: 4px solid rgba(37, 99, 235, 0.3);
+            border-radius: 50%; border-top: 4px solid var(--primary);
+            animation: spin 1s linear infinite; margin-bottom: 15px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .loading-text { color: var(--text); font-weight: 600; font-size: 1.1rem; }
     </style>
 </head>
 <body>
+
+<div id="loader" class="loader-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loaderText">Processing...</div>
+</div>
+
 <div class="container">
     <div class="main-content">
         <div class="header-section">
@@ -155,19 +200,20 @@ HTML_UI = """
 </div>
 
 <script>
+function showLoader(text) {
+    document.getElementById('loaderText').innerText = text;
+    document.getElementById('loader').style.display = 'flex';
+}
+function hideLoader() { document.getElementById('loader').style.display = 'none'; }
+
 async function handleFile(input) {
     const file = input.files[0];
     if (!file) return;
 
-    // --- 1. CLEAN SLATE: Erase old data ---
-    document.querySelectorAll('input').forEach(i => {
-        i.value = ''; // Clear text
-        i.style.borderColor = '#334155'; // Reset border
-    });
-    document.getElementById('results').innerHTML = '';
+    showLoader("Scanning Document...");
+    document.querySelectorAll('input').forEach(i => { i.value = ''; i.style.borderColor = '#334155'; });
     document.getElementById('results').style.display = 'none';
     
-    // --- 2. Preview Logic ---
     if (file.type.startsWith('image/')) {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -182,7 +228,6 @@ async function handleFile(input) {
         document.getElementById('uText').style.display = 'block';
     }
 
-    // --- 3. Upload & Fill ---
     const fd = new FormData(); fd.append('file', file);
     try {
         const res = await fetch('/extract', { method: 'POST', body: fd });
@@ -190,37 +235,51 @@ async function handleFile(input) {
         
         if(data.error) alert(data.error);
         else {
-            if (Object.keys(data).length === 0) {
-                 alert("⚠️ Scan complete, but no medical values found. Please check the file.");
-            }
+            if (Object.keys(data).length === 0) alert("⚠️ No medical data found.");
             for (const [k, v] of Object.entries(data)) {
                 const el = document.getElementById(k);
-                if(el) { 
-                    el.value = v; 
-                    el.style.borderColor = '#22c55e';
-                }
+                if(el) { el.value = v; el.style.borderColor = '#22c55e'; }
             }
         }
-    } catch { alert("Extraction Error. Please try again."); } 
+    } catch { alert("Extraction Error."); } 
+    finally { hideLoader(); }
 }
 
 async function analyze() {
+    showLoader("Analyzing Health Data...");
     const payload = {};
     document.querySelectorAll('input').forEach(i => { if(i.value) payload[i.id] = parseFloat(i.value); });
     
-    const res = await fetch('/predict', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
-    const data = await res.json();
-    
-    let html = '';
-    data.predictions.forEach(p => {
-        const color = p.risk.includes('High') ? '#ef4444' : '#22c55e';
-        html += `<div class="glass-card" style="margin-bottom:10px; border-left: 4px solid ${color}; display:flex; justify-content:space-between; align-items:center;">
-            <div><strong>${p.condition}</strong><br><small style="color:#94a3b8">${p.reason}</small></div>
-            <span class="badge" style="color:${color}; border:1px solid ${color}">${p.risk}</span>
-        </div>`;
-    });
-    document.getElementById('results').innerHTML = html;
-    document.getElementById('results').style.display = 'block';
+    try {
+        const res = await fetch('/predict', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+        const data = await res.json();
+        
+        let html = '';
+        
+        // 1. Predictions
+        data.predictions.forEach(p => {
+            const color = p.risk.includes('High') ? '#ef4444' : '#22c55e';
+            html += `<div class="glass-card" style="margin-bottom:10px; border-left: 4px solid ${color}; display:flex; justify-content:space-between; align-items:center;">
+                <div><strong>${p.condition}</strong><br><small style="color:#94a3b8">${p.reason}</small></div>
+                <span class="badge" style="color:${color}; border:1px solid ${color}">${p.risk}</span>
+            </div>`;
+        });
+
+        // 2. Recommendations (NEW)
+        if(data.suggestions && data.suggestions.length > 0) {
+            html += `<div class="glass-card" style="margin-top:15px; border-left: 4px solid #f59e0b;">
+                <strong>💡 Recommendations:</strong>
+                <ul style="margin: 10px 0 0 20px; padding: 0; color: #cbd5e1; font-size: 0.95rem;">`;
+            data.suggestions.forEach(s => {
+                html += `<li style="margin-bottom:8px;">${s}</li>`;
+            });
+            html += `</ul></div>`;
+        }
+
+        document.getElementById('results').innerHTML = html;
+        document.getElementById('results').style.display = 'block';
+    } catch { alert("Analysis Error."); } 
+    finally { hideLoader(); }
 }
 </script>
 </body>
@@ -252,5 +311,5 @@ def predict():
     return jsonify(dict(zip(['predictions', 'suggestions'], predict_risk(request.json))))
 
 if __name__ == '__main__':
-
-    app.run(host='0.0.0.0', port=port, debug=True)
+    # Local development server
+    app.run(host='0.0.0.0', port=5000, debug=True)
