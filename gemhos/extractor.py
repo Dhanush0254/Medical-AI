@@ -20,14 +20,13 @@ except ImportError:
 
 logging.basicConfig(level=logging.INFO)
 
-# --- 1. SMART TESSERACT SETUP (The Fix) ---
-# This makes it work on BOTH your Laptop and the Cloud automatically.
-if os.name == 'nt': # 'nt' means Windows
+# --- 1. SMART TESSERACT SETUP ---
+if os.name == 'nt': 
     pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-else: # Linux / Cloud / Docker
+else: 
     pytesseract.pytesseract.tesseract_cmd = 'tesseract'
 
-# --- 2. THE MEGA DICTIONARY ---
+# --- 2. MEGA DICTIONARY ---
 SEARCH_MAP = {
     'glucose': ['glucose', 'glu', 'sugar', 'fbs', 'bsl', 'fasting blood sugar', 'blood glucose', 'rbs', 'ppbs'],
     'hba1c': ['hba1c', 'a1c', 'glycated', 'haemoglobin a1c', 'hb a1c'],
@@ -66,7 +65,7 @@ def map_key_to_standard(text):
         if difflib.get_close_matches(text_lower, variants, cutoff=0.80): return std_key
     return None
 
-# --- 3. DEEP STRUCTURE SCAN (JSON/Horizontal CSV) ---
+# --- 3. DEEP STRUCTURE SCAN ---
 def scan_complex_structure(data):
     results = {}
     def recursive_scan(obj):
@@ -92,7 +91,7 @@ def scan_complex_structure(data):
     recursive_scan(data)
     return results
 
-# --- 4. FULL MATRIX SCAN (Vertical CSV) ---
+# --- 4. MATRIX SCAN ---
 def scan_csv_matrix(df):
     data = {}
     df_str = df.astype(str)
@@ -111,7 +110,7 @@ def scan_csv_matrix(df):
                         break 
     return data
 
-# --- 5. IMAGE PREP ---
+# --- 5. OPTIMIZED IMAGE PREP (The Speed Fix) ---
 def preprocess_image(image):
     try:
         if isinstance(image, Image.Image):
@@ -119,16 +118,21 @@ def preprocess_image(image):
             if len(image.shape) == 3: image = image[:, :, ::-1].copy()
         
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        if gray.shape[1] < 2000:
-            gray = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
         
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-        morph = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, kernel)
-        
-        return cv2.threshold(morph, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+        # SPEED FIX 1: Don't upscale if image is already readable (>1000px)
+        # SPEED FIX 2: Downscale huge phone photos (>2500px) to save CPU
+        h, w = gray.shape
+        if w < 1000:
+            gray = cv2.resize(gray, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)
+        elif w > 2500:
+            scale = 2500 / w
+            gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+
+        # Standard Thresholding (Faster than adaptive)
+        return cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
     except: return image
 
-# --- 6. PER-PAGE PDF SCANNER ---
+# --- 6. PDF SCANNER ---
 def extract_pdf_content(path):
     full_text = ""
     try:
@@ -144,8 +148,8 @@ def extract_pdf_content(path):
                 has_keywords = any(k in (text or "").lower() for k in SEARCH_MAP.keys())
                 
                 if (not text or len(text) < 20 or not has_keywords) and PDF_IMAGE_SUPPORT:
-                    print(f"⚠️ Page {i+1}: Image Scan...")
-                    images = convert_from_path(str(path), first_page=i+1, last_page=i+1)
+                    # Limit DPI to 150 for speed (Standard is 200+)
+                    images = convert_from_path(str(path), first_page=i+1, last_page=i+1, dpi=150)
                     for img in images:
                         processed = preprocess_image(img)
                         full_text += pytesseract.image_to_string(processed, config='--psm 6') + "\n"
