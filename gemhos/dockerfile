@@ -1,7 +1,7 @@
-# Use Python 3.9 as the base image
-FROM python:3.9-slim
+# Use the "bullseye" version to ensure package compatibility
+FROM python:3.9-slim-bullseye
 
-# 1. Install System Dependencies (Tesseract, Poppler, OpenCV libs)
+# 1. Install System Dependencies
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     libtesseract-dev \
@@ -20,9 +20,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 4. Copy the rest of the app code
 COPY . .
 
-# 5. Expose Port (Render uses 10000 or dynamic ports)
+# 5. Expose Port
 ENV PORT=5000
 EXPOSE 5000
 
-# 6. Run the App using Gunicorn (Production Server)
+# 6. Run the App
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "120", "app:app"]
